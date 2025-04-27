@@ -21,3 +21,6 @@ This project explores the ability of machine learning models to predict melodic 
 ### Setup
 ```bash
 pip install -r requirements.txt
+
+### References
+- Behavioral data from: [https://osf.io/wgz9t/]
