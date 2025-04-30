@@ -1,9 +1,11 @@
 from sklearn import metrics as skmetrics
 from sklearn.model_selection import KFold
 from sklearn.linear_model import LinearRegression, Ridge, Lasso
+from sklearn.metrics import mean_squared_error, r2_score
 from sklearn.utils import resample
 import matplotlib.pyplot as plt
 import numpy as np
+import torch
 
 def evaluate_model(model, x_train, y_train, x_val, y_val, x_test, y_test):
     """
@@ -32,13 +34,13 @@ def evaluate_model(model, x_train, y_train, x_val, y_val, x_test, y_test):
     print('Testing set mean squared error: {:.4f}'.format(score_mse_test))
     print('Testing set r-squared score: {:.4f}'.format(score_r2_test))
 
-def print_coefficients(model):
+def print_coefficients(model, X):
     """
-    Print coefficients of trained linear model.
+    Print coefficients of trained linear model using generic feature names.
     """
-    print("\nLearned coefficients (weights for each step):")
+    print("\nLearned coefficients (weights for each feature):")
     for i, coef in enumerate(model.coef_):
-        print(f"Step {i+1}: {coef:.4f}")
+        print(f"Feature {i+1}: {coef:.4f}")
 
 def cross_validate_model(X, y, k=5, model_type="linear", alpha=1.0):
     """
@@ -241,3 +243,93 @@ def kfold_bootstrap_ci_analysis(
         plt.show()
 
     return results_df
+
+def evaluate_NN_model(
+    model_class,
+    X_train,
+    y_train,
+    X_test,
+    y_test,
+    n_bootstrap=100,
+    alpha=0.05,
+    train_fn=None,
+    criterion=None,
+    model_kwargs=None
+):
+    """
+    Bootstraps neural network predictions to compute 95% CI coverage.
+
+    Args:
+        model_class: uninstantiated PyTorch model class
+        X_train, y_train: full training data
+        X_test, y_test: test data
+        n_bootstrap: number of bootstrapped models
+        alpha: significance level (default 0.05 for 95% CI)
+        train_fn: function(model, X, y) to train a single model
+        criterion: loss function used in train_fn
+        model_kwargs: arguments passed to model_class
+
+    Returns:
+        Dictionary with metrics and CI evaluation
+    """
+    model_kwargs = model_kwargs or {}
+    y_test = y_test.cpu().numpy() if isinstance(y_test, torch.Tensor) else y_test
+    all_preds = []
+
+    for b in range(n_bootstrap):
+        # Resample training data
+        indices = np.random.choice(len(X_train), size=len(X_train), replace=True)
+        X_boot = X_train[indices]
+        y_boot = y_train[indices]
+
+        # Create and train model
+        model = model_class(**model_kwargs)
+        train_fn(model, X_boot, y_boot, criterion=criterion, epochs=10)
+
+        # Predict
+        model.eval()
+        with torch.no_grad():
+            preds = model(X_test).argmax(dim=1).cpu().numpy()
+        all_preds.append(preds)
+
+    all_preds = np.stack(all_preds, axis=0)  # shape: (n_bootstrap, num_test)
+    mean_preds = all_preds.mean(axis=0)
+    ci_lower = np.percentile(all_preds, 100 * (alpha / 2), axis=0)
+    ci_upper = np.percentile(all_preds, 100 * (1 - alpha / 2), axis=0)
+
+    in_ci = (y_test >= ci_lower) & (y_test <= ci_upper)
+    coverage = in_ci.mean()
+
+    mse = mean_squared_error(y_test, mean_preds)
+    r2 = r2_score(y_test, mean_preds)
+
+    # Print summary
+    print(f"\nBootstrapped Prediction Evaluation ({n_bootstrap} models)")
+    print(f"97.5% CI coverage: {coverage:.2%}")
+    print(f"MSE: {mse:.2f}")
+    print(f"R²: {r2:.4f}\n")
+    for i in range(len(y_test)):
+        status = "Pass" if in_ci[i] else "Fail"
+        print(f"Melody {i+1}: Mean Pred = {mean_preds[i]:.1f}, CI = [{ci_lower[i]:.1f}, {ci_upper[i]:.1f}], True = {y_test[i]} → {status}")
+
+    plt.figure(figsize=(12, 5))
+    x = np.arange(len(y_test))
+    plt.plot(x, y_test, "ko", label="True")
+    plt.plot(x, mean_preds, "r-", label="Mean Predicted")
+    plt.fill_between(x, ci_lower, ci_upper, color="gray", alpha=0.3, label="95% CI")
+    plt.legend()
+    plt.title("Bootstrapped 97.5% Confidence Intervals per Melody")
+    plt.xlabel("Melody index")
+    plt.ylabel("Note (Index)")
+    plt.grid(True)
+    plt.tight_layout()
+    plt.show()
+
+    return {
+        "mean_preds": mean_preds,
+        "ci_lower": ci_lower,
+        "ci_upper": ci_upper,
+        "true": y_test,
+        "in_ci": in_ci,
+        "coverage": coverage
+    }

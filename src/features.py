@@ -1,4 +1,6 @@
 from sklearn.preprocessing import OneHotEncoder
+from sklearn.preprocessing import PolynomialFeatures
+from sklearn.kernel_approximation import RBFSampler
 import pandas as pd
 import numpy as np
 
@@ -65,3 +67,26 @@ def get_features_and_target(df, feature_steps=range(1, 7), extra_feature_cols=No
     y = df[target_col].values
 
     return X, y
+
+def apply_polynomial_expansion(X, degree=2):
+    """
+    Flattens and applies polynomial expansion.
+    Args:
+        X (np.array): shape (n_samples, sequence_len, num_pitches)
+        degree (int): polynomial degree
+    Returns:
+        X_poly: expanded features
+    """
+    X_flat = X.reshape(X.shape[0], -1)
+    poly = PolynomialFeatures(degree=degree, include_bias=False)
+    X_poly = poly.fit_transform(X_flat)
+    return X_poly
+
+def apply_rbf_kernel_approximation(X, gamma=0.1, n_components=500):
+    """
+    Applies random Fourier feature approximation to simulate RBF kernel.
+    """
+    X_flat = X.reshape(X.shape[0], -1)
+    rbf = RBFSampler(gamma=gamma, n_components=n_components)
+    X_rbf = rbf.fit_transform(X_flat)
+    return X_rbf

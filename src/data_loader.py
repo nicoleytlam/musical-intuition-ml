@@ -1,4 +1,6 @@
 import pandas as pd
+import torch
+from torch.utils.data import Dataset, DataLoader
 
 def load_full_data(filepath):
     """
@@ -30,3 +32,20 @@ def load_filtered_data(filepath, prefix="HC"):
     df = pd.read_csv(filepath)
     df = df[df['stem'].str.startswith(prefix)]
     return df
+
+class MelodyOneHotDataset(Dataset):
+    def __init__(self, X, y=None):
+        self.X = torch.tensor(X, dtype=torch.float32)
+        self.y = torch.tensor(y, dtype=torch.long) if y is not None else None
+
+    def __len__(self):
+        return len(self.X)
+
+    def __getitem__(self, idx):
+        if self.y is not None:
+            return self.X[idx], self.y[idx]
+        return self.X[idx]
+
+def get_dataloader(X, y=None, batch_size=32, shuffle=True):
+    dataset = MelodyOneHotDataset(X, y)
+    return DataLoader(dataset, batch_size=batch_size, shuffle=shuffle)
