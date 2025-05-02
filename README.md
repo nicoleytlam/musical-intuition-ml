@@ -19,9 +19,18 @@ This project explores the ability of machine learning models to predict melodic 
 - Explore how musical context (key, dominant chord) improves prediction
 
 ### Setup
+- Create a virtual environment:
+```bash
+python -m venv venv
+source venv/bin/activate # or venv|Scripts|activate for Windows
+```
+
+- Install dependencies:
 ```bash
 pip install -r requirements.txt
 ```
 
+- Navigate to main.ipynb and run the notebook cell by cell
+
 ### References
-- Behavioral data from: [https://osf.io/wgz9t/]
+- Behavioral data from: https://osf.io/wgz9t/
